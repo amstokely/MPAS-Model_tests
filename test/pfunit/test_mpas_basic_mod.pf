@@ -1,0 +1,60 @@
+module test_mpas_basic_mod
+    use pfunit
+    use mpi
+
+    implicit none
+
+contains
+
+    @Test(npes = [1])
+    subroutine test_mpas_basic(this)
+        use mpas_subdriver
+        use mpas_derived_types, only: core_type, domain_type
+        use mpas_test_utils_mod, only: extract_int_after_equals
+
+        implicit none
+
+        class (MpiTestMethod), intent(inout) :: this
+        type (core_type), pointer :: corelist => null()
+        type (domain_type), pointer :: domain => null()
+        integer :: external_comm, ierr
+        character(len = :), allocatable :: logfile
+        character(len = 256) :: line
+        integer :: ios, error_msgs, crit_error_msgs
+        logical :: log_found
+
+        logfile = "log.atmosphere.0000.out"
+        error_msgs = -1
+        crit_error_msgs = -1
+        log_found = .false.
+
+        external_comm = this%getMpiCommunicator()
+        call MPI_Errhandler_set(external_comm, MPI_ERRORS_RETURN, ierr)
+        call mpas_init(corelist, domain, external_comm = external_comm, &
+                namelistFileParam = 'test_mpas_basic/namelist.atmosphere_240km', &
+                streamsFileParam = 'test_mpas_basic/streams.atmosphere_240km')
+        call mpas_run(domain)
+        call mpas_finalize(corelist, domain)
+
+        open(unit = 10, file = logfile, status = "old", action = "read", iostat = ios)
+        call assertEqual(ios, 0, "Failed to open log file")
+
+        do
+            read(10, '(A)', iostat = ios) line
+            if (ios /= 0) exit
+
+            if (index(line, "Error messages") > 0) then
+                error_msgs = extract_int_after_equals(line)
+            else if (index(line, "Critical error messages") > 0) then
+                crit_error_msgs = extract_int_after_equals(line)
+            end if
+        end do
+        close(10)
+
+        ! Assert no errors
+        call assertEqual(0, error_msgs, "Non-zero error messages in log file")
+        call assertEqual(0, crit_error_msgs, "Non-zero critical error messages in log file")
+
+    end subroutine test_mpas_basic
+
+end module test_mpas_basic_mod

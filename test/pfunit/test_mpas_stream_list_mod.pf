@@ -1,0 +1,296 @@
+module test_mpas_stream_list_mod
+    use funit
+    use mpas_stream_list
+    use mpas_derived_types, only: MPAS_stream_list_type
+    use iso_c_binding, only: c_int
+
+    implicit none
+
+    @TestCase
+    type, extends(TestCase) :: test_mpas_stream_list
+        type (MPAS_stream_list_type), pointer :: list
+        type (MPAS_stream_list_type), pointer :: stream_1
+        type (MPAS_stream_list_type), pointer :: stream_1_duplicate
+        type (MPAS_stream_list_type), pointer :: stream_2
+        type(MPAS_stream_list_type), pointer :: stream_2_duplicate
+        type (MPAS_stream_list_type), pointer :: stream_3
+        type (MPAS_stream_list_type), pointer :: stream_3_duplicate
+        type (MPAS_stream_list_type), pointer :: found_stream
+    contains
+        procedure :: setup
+        procedure :: teardown
+        procedure :: test_create_list
+        procedure :: test_insert_single
+        procedure :: test_insert_duplicate_at_begin_and_end
+        procedure :: test_insert_duplicate_at_end
+        procedure :: test_remove_head
+    end type test_mpas_stream_list
+
+
+contains
+
+    recursive subroutine mock_logger(message, messageType, masterOnly, flushNow, &
+            intArgs, int8Args, realArgs, logicArgs, err)
+        use mpas_derived_types
+        implicit none
+
+        character(len=*), intent(in) :: message
+        integer, intent(in), optional :: messageType
+        logical, intent(in), optional :: masterOnly
+        logical, intent(in), optional :: flushNow
+        integer, dimension(:), intent(in), optional :: intArgs
+        integer(kind=I8KIND), dimension(:), intent(in), optional :: int8Args
+        real(kind=RKIND), dimension(:), intent(in), optional :: realArgs
+        logical, dimension(:), intent(in), optional :: logicArgs
+        integer, intent(out), optional :: err
+    end subroutine mock_logger
+
+    @Before
+    subroutine setup(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        call MPAS_stream_list_create(this%list)
+        allocate(this%stream_1)
+        this%stream_1 % name = 'stream1'
+        this%stream_1 % next => null()  ! Ensure it is not linked to the list
+        allocate(this%stream_1_duplicate)
+        this%stream_1_duplicate % name = 'stream1'
+        this%stream_1_duplicate % next => null()  ! ensure it is not linked to the list
+        allocate(this%stream_2)
+        this%stream_2 % name = 'stream2'
+        this%stream_2 % next => null()  ! Ensure it is not linked to the list
+        allocate(this%stream_2_duplicate)
+        this%stream_2_duplicate % name = 'stream2'
+        this%stream_2_duplicate % next => null()  ! ensure it is not linked to the list
+        allocate(this%stream_3)
+        this%stream_3 % name = 'stream3'
+        this%stream_3 % next => null()  ! Ensure it is not linked to the list
+        allocate(this%stream_3_duplicate)
+        this%stream_3_duplicate % name = 'stream3'
+        this%stream_3_duplicate % next => null()  ! ensure it is not linked to the list
+        this%found_stream => null()  ! Initialize found_stream to null
+    end subroutine setup
+
+    @After
+    subroutine teardown(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        call MPAS_stream_list_destroy(this%list)
+    end subroutine teardown
+
+    @Test
+    subroutine test_create_list(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        call assertTrue(associated(this%list))
+        call assertEqual(0, this%list % nItems)
+        call assertFalse(associated(this%list % head))
+    end subroutine test_create_list
+
+    @Test
+    subroutine test_insert_single(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        integer :: ierr
+        call MPAS_stream_list_insert(this%list, this%stream_1, ierr)
+        call assertEqual(1, this%list % nItems)
+        call assertTrue(associated(this%list % head))
+        call assertEqual('stream1', this%list % head % name)
+    end subroutine test_insert_single
+
+    @Test
+    subroutine test_insert_duplicate_at_begin(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        integer :: ierr
+
+        call MPAS_stream_list_insert(this%list, this%stream_1, ierr, mock_logger)
+        call assertEqual(0, ierr)
+        call MPAS_stream_list_insert(this%list, this%stream_1_duplicate, ierr, mock_logger)
+        call assertEqual(MPAS_STREAM_LIST_DUPLICATE, ierr, &
+                'Expected duplicate insertion to return MPAS_STREAM_LIST_DUPLICATE error code')
+    end subroutine
+
+    @Test
+    subroutine test_insert_duplicate_at_begin_and_end(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        integer :: ierr
+
+        call MPAS_stream_list_insert(this%list, this%stream_1, ierr, mock_logger)
+        call assertEqual(0, ierr)
+        call MPAS_stream_list_insert(this%list, this%stream_2, ierr, mock_logger)
+        call assertEqual(0, ierr)
+        call MPAS_stream_list_insert(this%list, this%stream_1_duplicate, ierr, mock_logger)
+        call assertEqual(MPAS_STREAM_LIST_DUPLICATE, ierr, &
+                'Expected duplicate insertion to return MPAS_STREAM_LIST_DUPLICATE error code')
+    end subroutine
+
+    @Test
+    subroutine test_insert_duplicate_at_end(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        integer :: ierr
+
+        call MPAS_stream_list_insert(this%list, this%stream_1, ierr, mock_logger)
+        call assertEqual(0, ierr)
+        call MPAS_stream_list_insert(this%list, this%stream_2, ierr, mock_logger)
+        call assertEqual(0, ierr)
+        call MPAS_stream_list_insert(this%list, this%stream_2_duplicate, ierr, mock_logger)
+        call assertEqual(MPAS_STREAM_LIST_DUPLICATE, ierr, &
+                'Expected duplicate insertion to return MPAS_STREAM_LIST_DUPLICATE error code')
+    end subroutine
+
+    @Test
+    subroutine test_remove_head(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        call MPAS_stream_list_remove(this%list, 'stream1', this%found_stream)
+        call assertTrue(associated(this%found_stream))
+        call assertEqual('stream1', this%found_stream % name)
+        call assertEqual(0, this%list % nItems)
+    end subroutine test_remove_head
+
+      @Test
+      subroutine test_remove_begin(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        call MPAS_stream_list_insert(this%list, this%stream_2)
+        call MPAS_stream_list_insert(this%list, this%stream_3)
+        call MPAS_stream_list_remove(this%list, 'stream1', this%found_stream)
+        call assertTrue(associated(this%found_stream))
+        call assertEqual('stream1', this%found_stream % name)
+        call assertEqual(2, this%list % nItems)
+      end subroutine test_remove_begin
+
+    @Test
+    subroutine test_remove_middle(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        call MPAS_stream_list_insert(this%list, this%stream_2)
+        call MPAS_stream_list_insert(this%list, this%stream_3)
+        call MPAS_stream_list_remove(this%list, 'stream2', this%found_stream)
+        call assertTrue(associated(this%found_stream))
+        call assertEqual('stream2', this%found_stream % name)
+        call assertEqual(2, this%list % nItems)
+    end subroutine test_remove_middle
+
+    @Test
+    subroutine test_remove_end(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        call MPAS_stream_list_insert(this%list, this%stream_2)
+        call MPAS_stream_list_insert(this%list, this%stream_3)
+        call MPAS_stream_list_remove(this%list, 'stream3', this%found_stream)
+        call assertTrue(associated(this%found_stream))
+        call assertEqual('stream3', this%found_stream % name)
+        call assertEqual(2, this%list % nItems)
+    end subroutine test_remove_end
+
+      @Test
+      subroutine test_remove_not_found(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        integer :: ierr
+        call MPAS_stream_list_remove(this%list, 'notfound', this%found_stream, ierr, mock_logger)
+        call assertFalse(associated(this%found_stream))
+        call assertEqual(ierr, MPAS_STREAM_LIST_NOT_FOUND)
+      end subroutine test_remove_not_found
+
+      @Test
+      subroutine test_list_length(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        integer :: len
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        call MPAS_stream_list_insert(this%list, this%stream_2)
+        call MPAS_stream_list_insert(this%list, this%stream_3)
+        len = MPAS_stream_list_length(this%list)
+        call assertEqual(3, len)
+      end subroutine test_list_length
+
+      @Test
+      subroutine test_query_unassociated_list_exits(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        integer :: ierr
+        logical :: found = .false.
+        nullify(this%list)
+        found = MPAS_stream_list_query(this%list, 'stream1', this%found_stream, ierr)
+        call assertEqual(MPAS_STREAM_LIST_NOT_FOUND, ierr, &
+            'Expected query on unassociated list to return MPAS_STREAM_LIST_NOT_FOUND error code')
+        call assertFalse(found, 'Expected query on unassociated list to return found = .false.')
+      end subroutine test_query_unassociated_list_exits
+
+    @Test
+    subroutine test_query_exact_match(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        logical :: found
+
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        found = MPAS_stream_list_query(this%list, 'stream1', this%found_stream)
+        call assertTrue(found)
+        call assertTrue(associated(this%found_stream))
+        call assertEqual('stream1', this%found_stream % name, &
+            'Expected found_stream to match the inserted stream name')
+    end subroutine test_query_exact_match
+
+
+      @Test
+      subroutine test_query_no_match(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        logical :: found
+
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        found = MPAS_stream_list_query(this%list, 'nomatch', this%found_stream)
+        call assertFalse(found)
+        call assertFalse(associated(this%found_stream))
+      end subroutine test_query_no_match
+
+    @Test
+    subroutine test_query_partial_fail(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        logical :: found
+
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        ! 'stream' is a substring but should fail due to regex anchoring (^...$)
+        found = MPAS_stream_list_query(this%list, 'stream', this%found_stream)
+        call assertFalse(found)
+        call assertFalse(associated(this%found_stream))
+    end subroutine test_query_partial_fail
+
+    @Test
+    subroutine test_query_bad_regex(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        logical :: found
+        integer :: ierr
+
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        ! Invalid regex: should return c_match = -1
+        found = MPAS_stream_list_query(this%list, '(', this%found_stream, ierr, mock_logger)
+        call assertFalse(found)
+        call assertFalse(associated(this%found_stream))
+    end subroutine test_query_bad_regex
+
+    @Test
+    subroutine test_query_match_end(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        logical :: found
+
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        call MPAS_stream_list_insert(this%list, this%stream_2)
+        call MPAS_stream_list_insert(this%list, this%stream_3)
+
+        found = MPAS_stream_list_query(this%list, 'stream3', this%found_stream)
+        call assertTrue(found)
+        call assertEqual('stream3', this%found_stream%name)
+    end subroutine test_query_match_end
+
+    @Test
+    subroutine test_query_skip_current(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        logical :: found
+
+        call MPAS_stream_list_insert(this%list, this%stream_1)
+        call MPAS_stream_list_insert(this%list, this%stream_2)
+        call MPAS_stream_list_insert(this%list, this%stream_3)
+
+        ! Set found_stream to stream_1; query should start at stream_1%next
+        this%found_stream => this%stream_1
+        found = MPAS_stream_list_query(this%list, 'stream2', this%found_stream)
+        call assertTrue(found)
+        call assertEqual('stream2', this%found_stream%name)
+    end subroutine test_query_skip_current
+
+end module test_mpas_stream_list_mod

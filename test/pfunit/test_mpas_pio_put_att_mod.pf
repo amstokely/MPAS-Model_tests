@@ -1,0 +1,107 @@
+!> @brief Unit test suite for the `mpas_pio_put_att` interface.
+!>
+!> This module contains pFUnit tests that verify correct behavior of the
+!> `mpas_pio_put_att` function when writing or overwriting scalar and 1D array
+!> attributes using the PIO library. The tests include cases for string, integer,
+!> and integer array attributes, and ensure that attributes can be written and
+!> updated in both define and data modes.
+!>
+!> The test case handles initialization and finalization of MPI and PIO I/O systems,
+!> and uses a temporary NetCDF file to validate attribute writing behavior.
+module test_mpas_pio_put_att_mod
+    use funit
+    use mpi
+    use pio
+    use mpas_io, only : mpas_pio_put_att
+    use mpas_test_utils_mod
+
+    implicit none
+
+    @TestCase
+    type, extends(TestCase) :: test_mpas_pio_put_att
+        type(iosystem_desc_t) :: iosys
+        type(file_desc_t) :: file
+        character(len = 255) :: filename
+        integer :: myRank, ntasks
+    contains
+        procedure :: setUp
+        procedure :: tearDown
+        procedure :: test_put_attr
+    end type test_mpas_pio_put_att
+
+contains
+
+    subroutine setUp(this)
+        class(test_mpas_pio_put_att), intent(inout) :: this
+        integer :: ierr, retVal
+        integer :: niotasks, stride, numAggregator, optBase, iotype
+
+        call MPI_Init(ierr)
+        call MPI_Comm_rank(MPI_COMM_WORLD, this%myRank, ierr)
+        call MPI_Comm_size(MPI_COMM_WORLD, this%ntasks, ierr)
+
+        stride = 1
+        numAggregator = 0
+        optBase = 1
+        iotype = PIO_iotype_netcdf
+        niotasks = this%ntasks
+        this%filename = 'test.nc'
+
+        call PIO_init(this%myRank, MPI_COMM_WORLD, niotasks, &
+                numAggregator, stride, PIO_rearr_subset, this%iosys, base = optBase)
+        call PIO_seterrorhandling(this%iosys, PIO_bcast_error)
+
+        retVal = PIO_createfile(this%iosys, this%file, iotype, trim(this%filename), PIO_clobber)
+        retVal = PIO_put_att(this%file, 0, 'str_attr', 'abc')
+        retVal = PIO_put_att(this%file, 0, 'int_attr', 1)
+        retVal = PIO_put_att(this%file, 0, 'int_array_attr', [1,2,3])
+        retVal = PIO_enddef(this%file)
+        call PIO_closefile(this%file)
+        retVal = PIO_openfile(this%iosys, this%file, iotype, trim(this%filename), PIO_write)
+    end subroutine setUp
+
+    subroutine tearDown(this)
+        class(test_mpas_pio_put_att), intent(inout) :: this
+        integer :: ierr
+
+        call PIO_closefile(this%file)
+        call PIO_finalize(this%iosys, ierr)
+        call MPI_Finalize(ierr)
+        call delete_file(this%filename)
+
+    end subroutine tearDown
+
+    @Test
+    subroutine test_put_attr(this)
+        class(test_mpas_pio_put_att), intent(inout) :: this
+        integer :: ret_val
+	integer :: varid=0
+
+        ret_val = mpas_pio_put_att(this%file, varid, 'new_str_attr', 'abc')
+        @assertEqual(ret_val, PIO_noerr, "Failed to write a new string attribute")
+
+        ret_val = mpas_pio_put_att(this%file, varid, 'str_attr', 'def')
+        @assertEqual(ret_val, PIO_noerr, "Failed to overwrite an existing string attribute")
+
+        ret_val = mpas_pio_put_att(this%file, varid, 'str_attr', 'abcdef')
+        @assertEqual(ret_val, PIO_noerr, "Failed to overwrite an existing string attribute with a longer string")
+
+        ret_val = mpas_pio_put_att(this%file, varid, 'new_int_attr', 1)
+        @assertEqual(ret_val, PIO_noerr, "Failed to write a new integer attribute")
+
+        ret_val = mpas_pio_put_att(this%file, varid, 'int_attr', 1)
+        @assertEqual(ret_val, PIO_noerr, "Failed to overwrite an existing integer attribute")
+
+        ret_val = mpas_pio_put_att(this%file, varid, 'new_int_array_attr', [1, 2, 3])
+        @assertEqual(ret_val, PIO_noerr, "Failed to write a new integer array attribute")
+
+        ret_val = mpas_pio_put_att(this%file, varid, 'int_array_attr', [4, 5, 6])
+        @assertEqual(ret_val, PIO_noerr, "Failed to overwrite an existing integer array attribute")
+
+        ret_val = mpas_pio_put_att(this%file, varid, 'int_array_attr', [1, 2, 3, 4, 5, 6])
+        @assertEqual(ret_val, PIO_noerr, "Failed to overwrite an existing integer array attribute with a longer array")
+
+    end subroutine test_put_attr
+
+end module test_mpas_pio_put_att_mod
+

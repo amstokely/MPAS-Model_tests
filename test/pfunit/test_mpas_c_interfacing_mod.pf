@@ -1,0 +1,86 @@
+module test_mpas_c_interfacing_mod
+    use pfunit
+    use iso_c_binding, only: c_char, c_null_char
+    use mpas_c_interfacing, only: mpas_f_to_c_string
+    implicit none
+
+    interface
+        function check_c_string(cstring)
+            use iso_c_binding, only: c_ptr
+            implicit none
+            type(c_ptr), intent(in) :: cstring
+            integer :: check_c_string
+        end function check_c_string
+    end interface
+
+contains
+
+    @Test
+    subroutine test_copy_simple_string()
+        character(len = *), parameter :: fstr = 'foo'
+        character(kind = c_char), dimension(len_trim(fstr) + 1) :: cstring
+        integer :: i
+
+        call mpas_f_to_c_string(fstr, cstring)
+
+        ! Check content
+        call assertEqual('f', cstring(1))
+        call assertEqual('o', cstring(2))
+        call assertEqual('o', cstring(3))
+
+        ! Check null terminator
+        call assertEqual(c_null_char, cstring(4), "Missing null terminator")
+    end subroutine
+
+    @Test
+    subroutine test_handle_underallocated_cstring_on_heap()
+        character(len = *), parameter :: fstr = 'foo'
+        character(kind = c_char, len = 1), dimension(4), parameter :: ref_cstring = ['f', 'o', 'o', c_null_char]
+        character(kind = c_char), dimension(:), allocatable :: cstring
+
+        allocate(character(kind = c_char) :: cstring(3  ))  ! Only 3 characters, no null terminator
+        call mpas_f_to_c_string(fstr, cstring)
+
+        call assertEqual(ref_cstring, cstring)
+    end subroutine
+
+    @Test
+    subroutine test_empty_string()
+        character(len = 5) :: fstr
+        character(kind = c_char), dimension(1) :: cstring
+        integer :: ierr
+
+        fstr = ''  ! Only padding
+
+        call mpas_f_to_c_string(fstr, cstring)
+        call assertEqual(c_null_char, cstring(1), "Empty string should yield only null terminator")
+    end subroutine
+
+    @Test
+    subroutine test_string_with_trailing_spaces()
+        character(len = 10) :: fstr
+        character(kind = c_char), dimension(4) :: cstring
+        integer :: ierr
+
+        fstr = 'bar   '  ! padded to length 10
+
+        call mpas_f_to_c_string(fstr, cstring)
+
+        call assertEqual('b', cstring(1))
+        call assertEqual('a', cstring(2))
+        call assertEqual('r', cstring(3))
+        call assertEqual(c_null_char, cstring(4), "Trailing spaces should not be copied")
+    end subroutine
+
+!    @Test
+!    subroutine test_handle_underallocated_cstring_on_stack_exits()
+!        character(len = *), parameter :: fstr = 'foo'
+!        character(kind = c_char, len = 1), dimension(4), parameter :: ref_cstring = ['f', 'o', 'o', c_null_char]
+!        character(kind = c_char), dimension(len(fstr))  :: cstring
+!
+!        call mpas_f_to_c_string(fstr, cstring)
+!
+!        call assertEqual(ref_cstring, cstring)
+!    end subroutine
+
+end module test_mpas_c_interfacing_mod
