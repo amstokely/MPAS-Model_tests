@@ -1,7 +1,9 @@
 #include "check_c_string.h"
-int check_c_string(const char *cstring)
-{
-  const char *expected = "foo";
+#include <stdio.h>
+#include <string.h>
+
+int check_c_string(const char *cstring) {
+    const char *expected = "foo";
     if (cstring == NULL) {
         return 1; // Null pointer
     }
@@ -16,9 +18,21 @@ int check_c_string(const char *cstring)
     }
 
     if (strcmp(cstring, expected) != 0) {
-        // Content mismatch
         return 2;
     }
 
     return 0; // Success
+}
+
+void reverse_c_string(char *cstring) {
+    if (cstring == NULL) {
+        return; // Handle null pointer
+    }
+
+    size_t len = strlen(cstring);
+    for (size_t i = 0; i < len / 2; i++) {
+        char temp = cstring[i];
+        cstring[i] = cstring[len - i - 1];
+        cstring[len - i - 1] = temp;
+    }
 }

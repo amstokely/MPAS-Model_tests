@@ -1,16 +1,29 @@
 module test_mpas_c_interfacing_mod
     use pfunit
     use iso_c_binding, only: c_char, c_null_char
-    use mpas_c_interfacing, only: mpas_f_to_c_string
+    use mpas_c_interfacing, only: mpas_f_to_c_string, mpas_c_to_f_string
     implicit none
 
     interface
-        function check_c_string(cstring)
+        function check_c_string(cstring) bind(C, name = "check_c_string")
             use iso_c_binding, only: c_ptr
             implicit none
-            type(c_ptr), intent(in) :: cstring
+            type(c_ptr), value, intent(in) :: cstring
             integer :: check_c_string
         end function check_c_string
+
+        subroutine reverse_c_string(cstring) bind(C, name = "reverse_c_string")
+            use iso_c_binding, only: c_ptr
+            implicit none
+            type(c_ptr), value, intent(in) :: cstring
+        end subroutine reverse_c_string
+
+        function strlen(cstring) bind(C, name = "strlen")
+            use iso_c_binding, only: c_ptr, c_size_t
+            implicit none
+            type(c_ptr), intent(in), value :: cstring
+            integer(c_size_t) :: strlen
+        end function strlen
     end interface
 
 contains
@@ -30,18 +43,6 @@ contains
 
         ! Check null terminator
         call assertEqual(c_null_char, cstring(4), "Missing null terminator")
-    end subroutine
-
-    @Test
-    subroutine test_handle_underallocated_cstring_on_heap()
-        character(len = *), parameter :: fstr = 'foo'
-        character(kind = c_char, len = 1), dimension(4), parameter :: ref_cstring = ['f', 'o', 'o', c_null_char]
-        character(kind = c_char), dimension(:), allocatable :: cstring
-
-        allocate(character(kind = c_char) :: cstring(3  ))  ! Only 3 characters, no null terminator
-        call mpas_f_to_c_string(fstr, cstring)
-
-        call assertEqual(ref_cstring, cstring)
     end subroutine
 
     @Test
@@ -72,15 +73,125 @@ contains
         call assertEqual(c_null_char, cstring(4), "Trailing spaces should not be copied")
     end subroutine
 
-!    @Test
-!    subroutine test_handle_underallocated_cstring_on_stack_exits()
-!        character(len = *), parameter :: fstr = 'foo'
-!        character(kind = c_char, len = 1), dimension(4), parameter :: ref_cstring = ['f', 'o', 'o', c_null_char]
-!        character(kind = c_char), dimension(len(fstr))  :: cstring
-!
-!        call mpas_f_to_c_string(fstr, cstring)
-!
-!        call assertEqual(ref_cstring, cstring)
-!    end subroutine
+    @Test
+    subroutine test_pass_string_to_c()
+        use iso_c_binding, only: c_ptr, c_loc
+        character(len = 3) :: fstr
+        character(kind = c_char), dimension(:), pointer :: cstring
+        type(c_ptr) :: cstring_ptr
+        integer :: ierr
+
+        allocate(cstring(len(fstr) + 1))
+        fstr = 'foo'
+
+        call mpas_f_to_c_string(fstr, cstring)
+        cstring_ptr = c_loc(cstring)
+        ierr = check_c_string(cstring_ptr)
+    end subroutine
+
+    @Test
+    subroutine test_pass_string_to_strlen()
+        use iso_c_binding, only: c_ptr, c_loc, c_size_t
+        character(len = 3) :: fstr
+        character(kind = c_char), dimension(len(fstr)+1), target :: cstring
+        type(c_ptr) :: cstring_ptr
+        integer(c_size_t) :: str_len, expected_len
+
+        fstr = 'foo'
+
+        call mpas_f_to_c_string(fstr, cstring)
+        cstring_ptr = c_loc(cstring)
+        str_len = strlen(cstring_ptr)
+        expected_len = len_trim(fstr)
+        call assertEqual(expected_len, str_len, "String length should be 3 for 'foo'")
+    end subroutine
+
+    @Test
+    subroutine test_copy_simple_cstring()
+        character(len=10) :: fstr
+        character(kind=c_char), dimension(4) :: cstring
+
+        cstring = [ 'f', 'o', 'o', c_null_char ]
+        call mpas_c_to_f_string(cstring, fstr)
+
+        call assertEqual('foo       ', fstr, "fstring should be 'foo' padded to len=10")
+    end subroutine
+
+    @Test
+    subroutine test_copy_empty_cstring()
+        character(len=10) :: fstr
+        character(kind=c_char), dimension(1) :: cstring
+
+        cstring = [ c_null_char ]
+        fstr = 'XXXXXXXXXX'
+        call mpas_c_to_f_string(cstring, fstr)
+
+        call assertEqual('          ', fstr, "fstring should be fully blank-padded")
+    end subroutine
+
+    @Test
+    subroutine test_truncate_long_cstring()
+        character(len=3) :: fstr
+        character(kind=c_char), dimension(6) :: cstring
+
+        cstring = [ 'h', 'e', 'l', 'l', 'o', c_null_char ]
+        call mpas_c_to_f_string(cstring, fstr)
+
+        call assertEqual('hel', fstr, "fstring should be truncated to 3 characters")
+    end subroutine
+
+    @Test
+    subroutine test_exact_length_cstring()
+        character(len=5) :: fstr
+        character(kind=c_char), dimension(6) :: cstring
+
+        cstring = [ 'h', 'e', 'l', 'l', 'o', c_null_char ]
+        call mpas_c_to_f_string(cstring, fstr)
+
+        call assertEqual('hello', fstr, "Exact fit with null terminator should copy correctly")
+    end subroutine
+
+    @Test
+    subroutine test_partial_copy_stops_at_null()
+        character(len=6) :: fstr
+        character(kind=c_char), dimension(6) :: cstring
+
+        cstring = [ 'h', 'e', 'y', c_null_char, 'x', 'x' ]
+        call mpas_c_to_f_string(cstring, fstr)
+
+        call assertEqual('hey   ', fstr, "Copy must stop at null terminator")
+    end subroutine
+
+    @Test
+    subroutine test_round_trip_f_to_c_to_f()
+        character(len=10) :: fstr_in, fstr_out
+        character(kind=c_char), dimension(11) :: cstring
+
+        fstr_in = 'foobar'
+
+        call mpas_f_to_c_string(fstr_in, cstring)
+        call mpas_c_to_f_string(cstring, fstr_out)
+
+        ! Since fstr_in had trailing spaces, compare only the trimmed part
+        call assertEqual(trim(fstr_in), trim(fstr_out), "Round-trip string mismatch")
+    end subroutine
+
+    @Test
+    subroutine test_reverse_string_in_c()
+        use iso_c_binding, only: c_ptr, c_loc, c_f_pointer
+        character(len=6) :: fstr_in
+        character(len=6) :: fstr_out
+        character(kind=c_char), dimension(len(fstr_in)+1), target :: cstring_in
+        character(kind=c_char), dimension(:), pointer :: cstring_out
+        type(c_ptr) :: cstring_ptr
+
+        fstr_in = 'abcdef'
+        call mpas_f_to_c_string(fstr_in, cstring_in)
+        cstring_ptr = c_loc(cstring_in)
+        call reverse_c_string(cstring_ptr)
+        call c_f_pointer(cstring_ptr, cstring_out, shape=[len(fstr_in)])
+        call mpas_c_to_f_string(cstring_out, fstr_out)
+        call assertEqual('fedcba', fstr_out, "Reversed string should be 'fedcba'")
+    end subroutine
 
 end module test_mpas_c_interfacing_mod

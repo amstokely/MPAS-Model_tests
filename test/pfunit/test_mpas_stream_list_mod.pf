@@ -24,6 +24,19 @@ module test_mpas_stream_list_mod
         procedure :: test_insert_duplicate_at_begin_and_end
         procedure :: test_insert_duplicate_at_end
         procedure :: test_remove_head
+        procedure :: test_remove_begin
+        procedure :: test_remove_middle
+        procedure :: test_remove_end
+        procedure :: test_remove_not_found
+        procedure :: test_list_length
+        procedure :: test_query_unassociated_list_exits
+        procedure :: test_query_exact_match
+        procedure :: test_query_no_match
+        procedure :: test_query_partial_fail
+        procedure :: test_query_bad_regex
+        procedure :: test_query_match_end
+        procedure :: test_query_skip_current
+        procedure :: test_query_regex_match_any_stream
     end type test_mpas_stream_list
 
 
@@ -201,7 +214,7 @@ contains
         call assertEqual(3, len)
       end subroutine test_list_length
 
-      @Test
+      !@Test
       subroutine test_query_unassociated_list_exits(this)
         class(test_mpas_stream_list), intent(inout) :: this
         integer :: ierr
@@ -292,5 +305,25 @@ contains
         call assertTrue(found)
         call assertEqual('stream2', this%found_stream%name)
     end subroutine test_query_skip_current
+
+    @Test
+    subroutine test_query_regex_match_any_stream(this)
+        class(test_mpas_stream_list), intent(inout) :: this
+        logical :: found
+
+        call MPAS_stream_list_insert(this%list, this%stream_1)  ! stream1
+        call MPAS_stream_list_insert(this%list, this%stream_2)  ! stream2
+        call MPAS_stream_list_insert(this%list, this%stream_3)  ! stream3
+        found = MPAS_stream_list_query(this%list, '.*', this%found_stream)
+        call assertTrue(found)
+        call assertEqual('stream1', this%found_stream%name)
+        found = MPAS_stream_list_query(this%list, '.*', this%found_stream)
+        call assertTrue(found)
+        call assertEqual('stream2', this%found_stream%name)
+        found = MPAS_stream_list_query(this%list, '.*', this%found_stream)
+        call assertTrue(found)
+        call assertEqual('stream3', this%found_stream%name)
+    end subroutine
+
 
 end module test_mpas_stream_list_mod

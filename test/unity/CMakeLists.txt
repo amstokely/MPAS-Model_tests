@@ -1,20 +1,36 @@
-add_library(dynamic_output_interval_stream SHARED dynamic_output_interval_stream.c)
-set_target_properties(dynamic_output_interval_stream PROPERTIES
-        LINKER_LANGUAGE C
-)
-target_link_libraries(dynamic_output_interval_stream PUBLIC
-        MPAS::external::ezxml
-)
 
-
-add_executable(test_dynamic_output_interval_stream test_dynamic_output_interval_stream.c)
-set_target_properties(test_dynamic_output_interval_stream PROPERTIES
+add_executable(test_stream_inquiry test_stream_inquiry.c)
+set_target_properties(test_stream_inquiry PROPERTIES
         LINKER_LANGUAGE C
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/test/unity
 )
-target_link_libraries(test_dynamic_output_interval_stream PRIVATE
-        dynamic_output_interval_stream unity::framework
+target_link_libraries(test_stream_inquiry PRIVATE
+        unity::framework MPAS::external::ezxml MPAS::framework
 )
 
-add_test(NAME test_dynamic_output_interval_stream
-         COMMAND test_dynamic_output_interval_stream)
+add_test(NAME test_stream_inquiry
+        COMMAND test_stream_inquiry)
+
+add_executable(test_xml_stream_parser test_xml_stream_parser.c)
+set_target_properties(test_xml_stream_parser PROPERTIES
+        LINKER_LANGUAGE C
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/test/unity
+)
+target_link_libraries(test_xml_stream_parser PRIVATE
+        unity::framework MPAS::external::ezxml MPAS::framework
+)
+
+add_test(NAME test_xml_stream_parser
+        COMMAND test_xml_stream_parser)
+
+add_executable(test_regex_matching test_regex_matching.c)
+set_target_properties(test_regex_matching PROPERTIES
+        LINKER_LANGUAGE C
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/test/unity
+)
+target_link_libraries(test_regex_matching PRIVATE
+        unity::framework MPAS::framework
+)
+
+add_test(NAME test_regex_matching
+        COMMAND test_regex_matching)
