@@ -15,6 +15,7 @@ static const char *test_xml_content = "<streams>\n"
         "  <stream name=\"output\" type=\"mutable\" filename_template=\"output.nc\" />\n"
         "  <immutable_stream name=\"restart\" input_interval=\"initial_only\" />\n"
         "</streams>\n";
+MPI_Comm comm;
 
 void setUp(void) {
     FILE *fp = fopen(temp_filename, "w");
@@ -23,6 +24,7 @@ void setUp(void) {
         test_xml_content, sizeof(char), strlen(test_xml_content), fp
     );
     fclose(fp);
+    comm = MPI_COMM_WORLD; // Use the global MPI communicator
 }
 
 void tearDown(void) {
@@ -30,7 +32,7 @@ void tearDown(void) {
 }
 
 void test_parse_and_query_valid_stream(void) {
-    ezxml_t root = parse_streams_file(0, temp_filename);
+    ezxml_t root = parse_streams_file(comm, temp_filename);
     TEST_ASSERT_NOT_NULL(root);
 
     const char *attval = NULL;
@@ -45,7 +47,7 @@ void test_parse_and_query_valid_stream(void) {
 }
 
 void test_parse_and_query_immutable_stream(void) {
-    ezxml_t root = parse_streams_file(0, temp_filename);
+    ezxml_t root = parse_streams_file(comm, temp_filename);
     TEST_ASSERT_NOT_NULL(root);
 
     const char *attval = NULL;
@@ -60,7 +62,7 @@ void test_parse_and_query_immutable_stream(void) {
 }
 
 void test_query_nonexistent_stream(void) {
-    ezxml_t root = parse_streams_file(0, temp_filename);
+    ezxml_t root = parse_streams_file(comm, temp_filename);
     TEST_ASSERT_NOT_NULL(root);
 
     const char *attval = NULL;
@@ -74,7 +76,7 @@ void test_query_nonexistent_stream(void) {
 }
 
 void test_query_existing_stream_missing_attr(void) {
-    ezxml_t root = parse_streams_file(0, temp_filename);
+    ezxml_t root = parse_streams_file(comm, temp_filename);
     TEST_ASSERT_NOT_NULL(root);
 
     const char *attval = NULL;
@@ -97,7 +99,7 @@ void test_stream_missing_name_attribute(void) {
     fwrite(broken_xml, sizeof(char), strlen(broken_xml), fp);
     fclose(fp);
 
-    ezxml_t root = parse_streams_file(0, temp_filename);
+    ezxml_t root = parse_streams_file(comm, temp_filename);
     TEST_ASSERT_NOT_NULL(root);
 
     const char *attval = NULL;
@@ -124,7 +126,7 @@ void test_stream_with_whitespace_in_name(void) {
     );
     fclose(fp);
 
-    ezxml_t root = parse_streams_file(0, temp_filename);
+    ezxml_t root = parse_streams_file(comm, temp_filename);
     TEST_ASSERT_NOT_NULL(root);
 
     const char *attval = NULL;
@@ -143,13 +145,14 @@ void test_stream_with_whitespace_in_name(void) {
 
 
 int main(void) {
-    UNITY_BEGIN();
     int ierr = MPI_Init(NULL, NULL);
+    UNITY_BEGIN();
     RUN_TEST(test_parse_and_query_valid_stream);
     RUN_TEST(test_parse_and_query_immutable_stream);
     RUN_TEST(test_query_nonexistent_stream);
     RUN_TEST(test_query_existing_stream_missing_attr);
     RUN_TEST(test_stream_with_whitespace_in_name);
+    const int result = UNITY_END();
     ierr = MPI_Finalize();
-    return UNITY_END();
+    return result;
 }
