@@ -30,11 +30,9 @@ add_pfunit_ctest(test_mpas_c_interfacing_mod
         LINK_LIBRARIES MPAS::framework mpas_test_utils pfunit check_c_string
 )
 
-if (MPAS_ENABLE_SYSTEM_TESTS)
-    add_pfunit_ctest(test_mpas_basic_mod
-            TEST_SOURCES test_mpas_basic_mod.pf
-            LINK_LIBRARIES MPAS::core::core_atmosphere mpas_test_utils pfunit
-            MAX_PES 4
-    )
-endif ()
+add_pfunit_ctest(test_mpas_basic_mod
+        TEST_SOURCES test_mpas_basic_mod.pf
+        LINK_LIBRARIES MPAS::core::core_atmosphere MPAS::external::smiol mpas_test_utils pfunit
+        MAX_PES 4
+)
 

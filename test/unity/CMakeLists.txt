@@ -34,3 +34,15 @@ target_link_libraries(test_regex_matching PRIVATE
 
 add_test(NAME test_regex_matching
         COMMAND test_regex_matching)
+
+add_executable(test_regex_matching test_regex_matching.c)
+set_target_properties(test_regex_matching PROPERTIES
+        LINKER_LANGUAGE C
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/test/unity
+)
+target_link_libraries(test_regex_matching PRIVATE
+        unity::framework MPAS::framework
+)
+
+add_test(NAME test_regex_matching
+        COMMAND test_regex_matching)
